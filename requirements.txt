@@ -1,0 +1,9 @@
+langchain>=0.0.350
+pinecone-client>=2.2.4
+beautifulsoup4>=4.12.2
+python-dotenv>=1.0.0
+requests>=2.31.0
+tiktoken>=0.5.2
+openai>=1.3.7
+tqdm>=4.66.1
+validators>=0.22.0 
