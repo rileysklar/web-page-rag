@@ -22,7 +22,7 @@ def initialize_rag_engine():
     )
 
 # App title and description
-st.title("💬 Website Chat Assistant")
+st.title("Ask me anything about the wedding")
 st.caption("Ask questions about the content from sanantonesklars.com")
 
 # Initialize RAG engine
