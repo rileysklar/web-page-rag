@@ -39,15 +39,11 @@ class RAGQueryEngine:
             temperature=temperature
         )
         
-        # Create custom prompt template with conversation context
+        # Create custom prompt template
         template = """Use the following pieces of context to answer the question at the end. 
         If you don't know the answer, just say that you don't know, don't try to make up an answer.
         
-        Previous conversation context:
-        {context}
-        
-        Relevant documents:
-        {documents}
+        Context: {context}
         
         Question: {question}
         
@@ -55,9 +51,9 @@ class RAGQueryEngine:
         
         self.prompt = PromptTemplate(
             template=template,
-            input_variables=["context", "documents", "question"]
+            input_variables=["context", "question"]
         )
-    
+
     def setup_retrieval_qa(
         self,
         namespace: Optional[str] = None
@@ -90,7 +86,6 @@ class RAGQueryEngine:
     def query(
         self,
         question: str,
-        context: Optional[str] = None,
         namespace: Optional[str] = None
     ) -> Dict[str, Any]:
         """
@@ -98,7 +93,6 @@ class RAGQueryEngine:
         
         Args:
             question (str): Question to ask
-            context (str, optional): Previous conversation context
             namespace (str, optional): Namespace to search in
             
         Returns:
@@ -111,11 +105,7 @@ class RAGQueryEngine:
             qa_chain = self.setup_retrieval_qa(namespace)
             
             # Get response
-            response = qa_chain({
-                "query": question,
-                "context": context or "No previous context.",
-                "documents": ""  # This will be filled by the chain
-            })
+            response = qa_chain({"query": question})
             
             logger.info("Successfully generated response")
             
