@@ -1,0 +1,12 @@
+fastapi>=0.110.0
+uvicorn>=0.27.1
+pydantic>=2.6.3
+python-dotenv>=1.0.0
+langchain>=0.0.350
+langchain-community>=0.0.20
+pinecone-client>=2.2.4
+openai>=1.3.7
+python-multipart>=0.0.9
+httpx>=0.27.0
+beautifulsoup4>=4.12.2
+validators>=0.22.0 
