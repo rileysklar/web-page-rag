@@ -20,8 +20,11 @@ from .models import (
     IndexRequest, 
     IndexResponse, 
     StatusResponse,
-    Source
+    Source,
+    ChatMessage,
+    ConversationMetadata
 )
+from .conversation import ConversationManager
 from ..rag_query import RAGQueryEngine
 from ..web_scraper import WebScraper
 from ..vector_store import VectorStore
@@ -36,6 +39,9 @@ redis_client = Redis(
     db=0,
     decode_responses=True
 )
+
+# Initialize conversation manager
+conversation_manager = ConversationManager(redis_client)
 
 # Initialize rate limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -80,10 +86,6 @@ rag_engine = RAGQueryEngine(
     temperature=0.7
 )
 
-def get_cache_key(request: ChatRequest) -> str:
-    """Generate a cache key for a chat request."""
-    return f"chat:{request.message}:{request.conversation_id or 'none'}"
-
 @app.post("/api/rag/query", response_model=ChatResponse)
 @limiter.limit("20/minute")  # Rate limit: 20 requests per minute
 async def query_rag(
@@ -97,15 +99,31 @@ async def query_rag(
     Responses are cached for 1 hour.
     """
     try:
+        # Get or create conversation ID
+        conversation_id = chat_request.conversation_id or conversation_manager.create_conversation()
+        
+        # Add user message to conversation
+        user_message = ChatMessage(
+            role="user",
+            content=chat_request.message
+        )
+        conversation_manager.add_message(conversation_id, user_message)
+        
+        # Get conversation history
+        history = conversation_manager.get_messages(conversation_id)
+        
         # Check cache first
-        cache_key = get_cache_key(chat_request)
+        cache_key = f"chat:{conversation_id}:{chat_request.message}"
         cached_response = redis_client.get(cache_key)
         
         if cached_response:
             return ChatResponse(**json.loads(cached_response))
         
         # Get fresh response
-        response = rag_engine.query(chat_request.message)
+        response = rag_engine.query(
+            chat_request.message,
+            context="\n".join([msg.content for msg in history[-5:]])  # Use last 5 messages for context
+        )
         
         # Convert source documents to Source models
         sources = [
@@ -116,10 +134,20 @@ async def query_rag(
             for doc in response["source_documents"]
         ]
         
+        # Add assistant message to conversation
+        assistant_message = ChatMessage(
+            role="assistant",
+            content=response["answer"],
+            sources=[{"url": s.url, "title": s.title} for s in sources]
+        )
+        conversation_manager.add_message(conversation_id, assistant_message)
+        
         # Create response
         chat_response = ChatResponse(
             answer=response["answer"],
-            sources=sources
+            sources=sources,
+            conversation_id=conversation_id,
+            history=conversation_manager.get_messages(conversation_id)
         )
         
         # Cache response for 1 hour
@@ -135,6 +163,73 @@ async def query_rag(
         raise HTTPException(
             status_code=500,
             detail=f"Error processing query: {str(e)}"
+        )
+
+@app.get("/api/conversations", response_model=List[ConversationMetadata])
+@limiter.limit("60/minute")  # Rate limit: 60 requests per minute
+async def list_conversations(
+    request: Request,  # for rate limiter
+    limit: int = 10,
+    offset: int = 0,
+    api_key: str = Depends(verify_api_key)
+) -> List[ConversationMetadata]:
+    """
+    List recent conversations.
+    Rate limited to 60 requests per minute.
+    """
+    try:
+        return conversation_manager.list_conversations(limit, offset)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error listing conversations: {str(e)}"
+        )
+
+@app.get("/api/conversations/{conversation_id}", response_model=List[ChatMessage])
+@limiter.limit("60/minute")  # Rate limit: 60 requests per minute
+async def get_conversation(
+    request: Request,  # for rate limiter
+    conversation_id: str,
+    api_key: str = Depends(verify_api_key)
+) -> List[ChatMessage]:
+    """
+    Get messages in a conversation.
+    Rate limited to 60 requests per minute.
+    """
+    try:
+        messages = conversation_manager.get_messages(conversation_id)
+        if not messages:
+            raise HTTPException(
+                status_code=404,
+                detail="Conversation not found"
+            )
+        return messages
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error getting conversation: {str(e)}"
+        )
+
+@app.delete("/api/conversations/{conversation_id}")
+@limiter.limit("30/minute")  # Rate limit: 30 requests per minute
+async def delete_conversation(
+    request: Request,  # for rate limiter
+    conversation_id: str,
+    api_key: str = Depends(verify_api_key)
+):
+    """
+    Delete a conversation.
+    Rate limited to 30 requests per minute.
+    """
+    try:
+        conversation_manager.delete_conversation(conversation_id)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error deleting conversation: {str(e)}"
         )
 
 @app.post("/api/rag/index", response_model=IndexResponse)
