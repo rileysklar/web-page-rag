@@ -1,0 +1,67 @@
+# flyctl launch added from .gitignore
+# Python
+**/__pycache__
+**/*.py[cod]
+**/*$py.class
+**/*.so
+**/.Python
+**/build
+**/develop-eggs
+**/dist
+**/downloads
+**/eggs
+**/.eggs
+**/lib
+**/lib64
+**/parts
+**/sdist
+**/var
+**/wheels
+**/*.egg-info
+**/.installed.cfg
+**/*.egg
+
+# Virtual Environment
+**/venv
+**/ENV
+**/env
+**/.env
+
+# IDE
+**/.idea
+**/.vscode
+**/*.swp
+**/*.swo
+**/.DS_Store
+
+# Streamlit
+**/.streamlit
+
+# Logs
+**/*.log
+**/logs
+
+# Cache
+**/.cache
+**/.pytest_cache
+**/.coverage
+**/htmlcov
+
+# Pinecone and model files
+**/*.index
+**/*.bin
+**/*.h5
+**/*.pkl
+**/*.model
+
+# Misc
+**/.DS_Store
+**/.env.local
+**/.env.development.local
+**/.env.test.local
+**/.env.production.local 
+
+# flyctl launch added from .pytest_cache/.gitignore
+# Created by pytest automatically.
+.pytest_cache/**/*
+fly.toml
