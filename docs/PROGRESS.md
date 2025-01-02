@@ -56,6 +56,18 @@
 - [x] Created TypeScript-friendly response models
 - [x] Added comprehensive API documentation with Swagger/ReDoc
 
+### API Performance & Security (Latest)
+- [x] Added rate limiting:
+  - 20 requests/minute for chat queries
+  - 5 requests/hour for indexing
+  - 60 requests/minute for status checks
+  - 100 requests/minute for health checks
+- [x] Implemented Redis caching:
+  - 1-hour cache for chat responses
+  - 1-minute cache for system status
+- [x] Configured CORS for specific origins
+- [x] Enhanced error handling with rate limit errors
+
 ### Current Features
 1. Web Scraping
    - Selenium-powered JavaScript rendering
@@ -86,9 +98,9 @@
    - Authentication and security
 
 ## Next Steps
-- [ ] Add rate limiting for API calls
+- [x] Add rate limiting for API calls
+- [x] Add caching layer for responses
 - [ ] Create Docker configuration for deployment
-- [ ] Add caching layer for responses
 - [ ] Implement conversation history
 - [ ] Add progress bars for long-running operations
 - [ ] Implement background tasks for indexing
