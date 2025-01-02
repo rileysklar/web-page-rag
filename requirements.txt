@@ -1,4 +1,6 @@
 langchain>=0.0.350
+langchain-community>=0.0.10
+langchain-openai>=0.0.5
 pinecone-client>=2.2.4
 beautifulsoup4>=4.12.2
 python-dotenv>=1.0.0
