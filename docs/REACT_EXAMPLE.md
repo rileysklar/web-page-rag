@@ -1,8 +1,16 @@
 # React Integration Example
 
+## Environment Setup
+
+Create a `.env` file in your React project:
+```env
+VITE_API_URL=https://web-page-rag-api.fly.dev
+VITE_API_KEY=test123
+```
+
 ## Chat Component
 
-Here's a simple React component that interacts with the RAG API:
+Here's a React component that interacts with the deployed RAG API:
 
 ```tsx
 import { useState } from 'react';
@@ -19,37 +27,41 @@ interface ChatMessage {
 }
 
 interface ChatProps {
-  apiUrl: string;
-  apiKey: string;
+  apiKey?: string; // Optional prop to override default API key
 }
 
-export const RagChat: React.FC<ChatProps> = ({ apiUrl, apiKey }) => {
+export const RagChat: React.FC<ChatProps> = ({ apiKey }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Use environment variables with fallbacks
+  const API_URL = import.meta.env.VITE_API_URL || 'https://web-page-rag-api.fly.dev';
+  const API_KEY = apiKey || import.meta.env.VITE_API_KEY || 'test123';
 
   const sendMessage = async (message: string) => {
     try {
       setLoading(true);
+      setError(null);
       
       // Add user message
       setMessages(prev => [...prev, { role: 'user', content: message }]);
       
-      // Send request to API
-      const response = await fetch(`${apiUrl}/api/rag/query`, {
+      // Send request to deployed API
+      const response = await fetch(`${API_URL}/api/rag/query`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-API-Key': apiKey,
+          'X-API-Key': API_KEY,
         },
-        body: JSON.stringify({
-          message,
-          conversation_id: 'optional-conversation-id',
-        }),
+        body: JSON.stringify({ message }),
       });
       
       if (!response.ok) {
-        throw new Error('Failed to get response');
+        throw new Error(
+          `API request failed: ${response.status} ${response.statusText}`
+        );
       }
       
       const data = await response.json();
@@ -63,6 +75,7 @@ export const RagChat: React.FC<ChatProps> = ({ apiUrl, apiKey }) => {
       
     } catch (error) {
       console.error('Error:', error);
+      setError(error instanceof Error ? error.message : 'An error occurred');
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: 'Sorry, I encountered an error processing your request.',
@@ -74,7 +87,7 @@ export const RagChat: React.FC<ChatProps> = ({ apiUrl, apiKey }) => {
   };
 
   return (
-    <div className="flex flex-col h-[600px] w-full max-w-2xl mx-auto">
+    <div className="flex flex-col h-[600px] w-full max-w-2xl mx-auto bg-white rounded-lg shadow-lg">
       {/* Chat messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((message, index) => (
@@ -97,9 +110,9 @@ export const RagChat: React.FC<ChatProps> = ({ apiUrl, apiKey }) => {
             {/* Sources */}
             {message.sources && (
               <div className="mt-2 text-sm text-gray-500">
-                <details>
-                  <summary>Sources</summary>
-                  <ul className="mt-1 list-disc list-inside">
+                <details className="cursor-pointer">
+                  <summary className="font-medium">View Sources</summary>
+                  <ul className="mt-1 list-disc list-inside pl-2">
                     {message.sources.map((source, idx) => (
                       <li key={idx}>
                         <a
@@ -125,6 +138,13 @@ export const RagChat: React.FC<ChatProps> = ({ apiUrl, apiKey }) => {
             <div className="animate-pulse text-gray-500">Thinking...</div>
           </div>
         )}
+
+        {/* Error message */}
+        {error && (
+          <div className="text-red-500 text-center p-2 bg-red-50 rounded">
+            {error}
+          </div>
+        )}
       </div>
       
       {/* Input form */}
@@ -135,21 +155,21 @@ export const RagChat: React.FC<ChatProps> = ({ apiUrl, apiKey }) => {
             sendMessage(input.trim());
           }
         }}
-        className="p-4 border-t"
+        className="p-4 border-t border-gray-200"
       >
         <div className="flex space-x-4">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask a question..."
-            className="flex-1 p-2 border rounded-lg"
+            placeholder="Ask a question about the website..."
+            className="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             disabled={loading}
           />
           <button
             type="submit"
             disabled={!input.trim() || loading}
-            className="px-4 py-2 bg-blue-500 text-white rounded-lg disabled:opacity-50"
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg disabled:opacity-50 hover:bg-blue-600 transition-colors"
           >
             Send
           </button>
@@ -162,55 +182,77 @@ export const RagChat: React.FC<ChatProps> = ({ apiUrl, apiKey }) => {
 
 ## Usage
 
-1. Install the component in your React/Next.js/Astro project:
-
+1. Install dependencies:
 ```bash
 # If using TypeScript
 npm install @types/react @types/react-dom
 
 # If using Tailwind (for styling)
-npm install -D tailwindcss
+npm install -D tailwindcss postcss autoprefixer
+npx tailwindcss init -p
 ```
 
-2. Use the component:
+2. Configure Tailwind CSS:
+```js
+// tailwind.config.js
+module.exports = {
+  content: [
+    "./src/**/*.{js,jsx,ts,tsx}",
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+}
+```
 
+3. Use the component:
 ```tsx
-// pages/index.tsx or App.tsx
+// App.tsx or any other component
 import { RagChat } from './components/RagChat';
 
-export default function Home() {
+export default function App() {
   return (
     <main className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">Chat with our Documentation</h1>
+      <h1 className="text-2xl font-bold mb-4">Chat with our Website</h1>
       
-      <RagChat
-        apiUrl="http://localhost:8000"
-        apiKey="your-api-key"
-      />
+      <RagChat />
     </main>
   );
 }
 ```
 
-3. Environment Variables:
-
-Create a `.env.local` file:
-
-```env
-NEXT_PUBLIC_RAG_API_URL=http://localhost:8000
-NEXT_PUBLIC_RAG_API_KEY=your-api-key
-```
-
 ## Features
-
 - Real-time chat interface
-- Source attribution with collapsible details
+- Source attribution for answers
 - Loading states
 - Error handling
-- Rate limiting handling
-- Mobile-responsive design
+- Environment variable configuration
+- Responsive design
 - Accessible UI elements
 
-## Styling
+## Error Handling
+The component handles various error cases:
+- Network errors
+- API errors
+- Rate limiting
+- Authentication failures
 
-The component uses Tailwind CSS for styling. Make sure to include Tailwind in your project or replace the classes with your preferred styling solution. 
+## Rate Limiting
+The API has the following rate limits:
+- 20 requests per minute for queries
+- 100 requests per minute for health checks
+
+## Security
+- API key is required for all requests
+- CORS is configured for your domain
+- HTTPS is enforced
+
+## Best Practices
+1. Store API key securely
+2. Implement proper error handling
+3. Add loading states for better UX
+4. Cache responses when appropriate
+5. Add retry logic for failed requests
+6. Implement proper TypeScript types
+7. Use environment variables for configuration 
