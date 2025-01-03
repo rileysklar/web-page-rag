@@ -102,7 +102,7 @@ class WebScraper:
                     '.jpg', '.jpeg', '.png', '.gif', '.pdf', 
                     '.doc', '.docx', '.mp3', '.mp4', '.zip'
                 ]) and
-                '#' not in url  # Ignore anchor links
+                (not '#' in url or url.endswith('.jsx'))  # Allow JSX files but ignore other anchor links
             )
         except Exception:
             return False
@@ -146,7 +146,7 @@ class WebScraper:
         # If no specific content areas found, get all text
         if not content_sections:
             content_sections.append(soup.get_text(separator='\n', strip=True))
-        
+
         # Join all content
         text = '\n\n'.join(content_sections)
         
@@ -176,19 +176,53 @@ class WebScraper:
         # Look for links in HTML
         for a_tag in soup.find_all('a', href=True):
             href = a_tag['href']
-            if href and not href.startswith(('#', 'javascript:', 'mailto:', 'tel:')):
+            if href and not href.startswith(('javascript:', 'mailto:', 'tel:')):
                 absolute_url = urljoin(current_url, href)
                 if self._is_valid_url(absolute_url):
                     links.add(absolute_url)
         
-        # Look for links in JavaScript objects
-        scripts = soup.find_all('script', type="application/json")
+        # Look for links in JavaScript objects and JSON data
+        scripts = soup.find_all(['script', 'div'], {
+            'type': ['application/json', 'text/javascript', 'module'],
+            'id': re.compile(r'.*-json$', re.I)  # Match IDs ending in -json
+        })
+        
         for script in scripts:
             try:
-                data = json.loads(script.string)
-                self._extract_links_from_json(data, current_url, links)
-            except:
-                pass
+                if script.string:
+                    # Try to extract JSON from the script content
+                    json_matches = re.finditer(r'\{(?:[^{}]|(?R))*\}', script.string)
+                    for json_match in json_matches:
+                        try:
+                            data = json.loads(json_match.group())
+                            self._extract_links_from_json(data, current_url, links)
+                            # Also extract and store text content
+                            text_content = self._extract_text_from_json(data)
+                            if text_content:
+                                logger.info(f"Found JSON content: {text_content[:100]}...")
+                        except json.JSONDecodeError:
+                            continue
+            except Exception as e:
+                logger.debug(f"Error processing script: {str(e)}")
+
+        # Look for React components with JSON data
+        for tag in soup.find_all(True):  # Search all tags
+            # Check for data attributes that might contain JSON
+            json_attrs = [attr for attr in tag.attrs if 
+                         attr.startswith('data-') and 
+                         isinstance(tag[attr], str) and 
+                         tag[attr].startswith('{')]
+            
+            for attr in json_attrs:
+                try:
+                    data = json.loads(tag[attr])
+                    self._extract_links_from_json(data, current_url, links)
+                    # Extract and store text content
+                    text_content = self._extract_text_from_json(data)
+                    if text_content:
+                        logger.info(f"Found component data: {text_content[:100]}...")
+                except:
+                    continue
         
         return list(links)
 
@@ -213,6 +247,37 @@ class WebScraper:
             for item in data:
                 if isinstance(item, (dict, list)):
                     self._extract_links_from_json(item, current_url, links)
+
+    def _extract_text_from_json(self, data: Any) -> str:
+        """
+        Extract text content from JSON data structures.
+        
+        Args:
+            data: JSON data to process
+            
+        Returns:
+            str: Extracted text content
+        """
+        text_content = []
+        
+        def extract_text(item: Any) -> None:
+            if isinstance(item, dict):
+                # Look for common text fields
+                text_fields = ['question', 'answer', 'title', 'content', 'description', 'text']
+                for field in text_fields:
+                    if field in item and isinstance(item[field], str):
+                        text_content.append(item[field])
+                # Recursively process nested objects
+                for value in item.values():
+                    extract_text(value)
+            elif isinstance(item, list):
+                for value in item:
+                    extract_text(value)
+            elif isinstance(item, str):
+                text_content.append(item)
+        
+        extract_text(data)
+        return '\n'.join(text_content)
 
     def _scrape_url(self, url: str, depth: int = 0) -> List[Dict[str, str]]:
         """
@@ -264,13 +329,41 @@ class WebScraper:
             
             # Extract and process links
             links = self._extract_links(html_content, url)
+            
+            # Check for JSX files
+            if url.endswith('.jsx'):
+                try:
+                    response = requests.get(url)
+                    if response.ok:
+                        # Extract JSON data from JSX file
+                        jsx_content = response.text
+                        json_matches = re.finditer(r'const\s+(\w+)\s*=\s*({[\s\S]*?});', jsx_content)
+                        for match in json_matches:
+                            try:
+                                json_data = json.loads(match.group(2))
+                                text_content = self._extract_text_from_json(json_data)
+                                if text_content:
+                                    documents.append({
+                                        'page_content': text_content,
+                                        'metadata': {
+                                            'source': url,
+                                            'title': f"JSX Component: {match.group(1)}",
+                                            'depth': depth
+                                        }
+                                    })
+                            except:
+                                continue
+                except:
+                    logger.warning(f"Failed to process JSX file: {url}")
+            
+            # Process found links
             for link in links:
                 if link not in self.visited_urls:
                     documents.extend(self._scrape_url(link, depth + 1))
                 
         except Exception as e:
             logger.error(f"Error scraping {url}: {str(e)}")
-        
+
         return documents
 
     def scrape(self) -> List[Dict[Any, Any]]:
