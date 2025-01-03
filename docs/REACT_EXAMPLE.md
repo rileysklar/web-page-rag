@@ -4,8 +4,9 @@
 
 Create a `.env` file in your React project:
 ```env
-VITE_API_URL=https://web-page-rag-api.fly.dev
-VITE_API_KEY=test123
+# Astro/Vite environment variables must start with VITE_
+VITE_API_URL="https://web-page-rag-api.fly.dev"
+VITE_API_KEY="test123"
 ```
 
 ## Chat Component
@@ -28,16 +29,18 @@ interface ChatMessage {
 
 interface ChatProps {
   apiKey?: string; // Optional prop to override default API key
+  apiUrl?: string; // Optional prop to override default API URL
 }
 
-export const RagChat: React.FC<ChatProps> = ({ apiKey }) => {
+export const RagChat: React.FC<ChatProps> = ({ apiKey, apiUrl }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Use environment variables with fallbacks
-  const API_URL = import.meta.env.VITE_API_URL || 'https://web-page-rag-api.fly.dev';
+  // Make sure the URL doesn't have a trailing slash
+  const BASE_URL = (apiUrl || import.meta.env.VITE_API_URL || 'https://web-page-rag-api.fly.dev').replace(/\/$/, '');
   const API_KEY = apiKey || import.meta.env.VITE_API_KEY || 'test123';
 
   const sendMessage = async (message: string) => {
@@ -48,8 +51,11 @@ export const RagChat: React.FC<ChatProps> = ({ apiKey }) => {
       // Add user message
       setMessages(prev => [...prev, { role: 'user', content: message }]);
       
+      // Log the full URL for debugging
+      console.log('Sending request to:', `${BASE_URL}/api/rag/query`);
+      
       // Send request to deployed API
-      const response = await fetch(`${API_URL}/api/rag/query`, {
+      const response = await fetch(`${BASE_URL}/api/rag/query`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -180,73 +186,68 @@ export const RagChat: React.FC<ChatProps> = ({ apiKey }) => {
 };
 ```
 
-## Usage
+## Usage in Astro
 
-1. Install dependencies:
-```bash
-# If using TypeScript
-npm install @types/react @types/react-dom
-
-# If using Tailwind (for styling)
-npm install -D tailwindcss postcss autoprefixer
-npx tailwindcss init -p
-```
-
-2. Configure Tailwind CSS:
-```js
-// tailwind.config.js
-module.exports = {
-  content: [
-    "./src/**/*.{js,jsx,ts,tsx}",
-  ],
-  theme: {
-    extend: {},
-  },
-  plugins: [],
-}
-```
-
-3. Use the component:
+1. Create the component file:
 ```tsx
-// App.tsx or any other component
-import { RagChat } from './components/RagChat';
-
-export default function App() {
-  return (
-    <main className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">Chat with our Website</h1>
-      
-      <RagChat />
-    </main>
-  );
-}
+// src/components/RagChat.tsx
+// (Copy the component code from above)
 ```
 
-## Features
-- Real-time chat interface
-- Source attribution for answers
-- Loading states
-- Error handling
-- Environment variable configuration
-- Responsive design
-- Accessible UI elements
+2. Use in Astro page:
+```astro
+---
+// src/pages/index.astro
+import { RagChat } from '../components/RagChat';
+---
 
-## Error Handling
-The component handles various error cases:
-- Network errors
-- API errors
-- Rate limiting
-- Authentication failures
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>RAG Chat</title>
+  </head>
+  <body>
+    <main class="container mx-auto p-4">
+      <h1 class="text-2xl font-bold mb-4">Chat with our Website</h1>
+      
+      <RagChat
+        client:load
+        apiUrl={import.meta.env.VITE_API_URL}
+        apiKey={import.meta.env.VITE_API_KEY}
+      />
+    </main>
+  </body>
+</html>
+```
 
-## Rate Limiting
-The API has the following rate limits:
-- 20 requests per minute for queries
-- 100 requests per minute for health checks
+3. Configure environment variables in `.env`:
+```env
+VITE_API_URL="https://web-page-rag-api.fly.dev"
+VITE_API_KEY="test123"
+```
 
-## Security
-- API key is required for all requests
-- CORS is configured for your domain
-- HTTPS is enforced
+## Troubleshooting
+
+Common issues and solutions:
+
+1. **404 Not Found Error**
+   - Make sure `VITE_API_URL` is set correctly in `.env`
+   - Verify no trailing slash in the API URL
+   - Check the API endpoint path is correct (`/api/rag/query`)
+
+2. **Authentication Error**
+   - Verify `VITE_API_KEY` is set correctly
+   - Check the `X-API-Key` header is being sent
+
+3. **CORS Error**
+   - Ensure your domain is allowed in the API's CORS configuration
+   - Check for any proxy settings in your Astro config
+
+4. **Environment Variables**
+   - In Astro/Vite, environment variables must start with `VITE_`
+   - Restart the dev server after changing `.env`
+   - Use `import.meta.env.VITE_*` to access variables
 
 ## Best Practices
 1. Store API key securely
@@ -255,4 +256,7 @@ The API has the following rate limits:
 4. Cache responses when appropriate
 5. Add retry logic for failed requests
 6. Implement proper TypeScript types
-7. Use environment variables for configuration 
+7. Use environment variables for configuration
+8. Log API URLs during development
+9. Handle trailing slashes in URLs
+10. Provide fallback values for environment variables 
